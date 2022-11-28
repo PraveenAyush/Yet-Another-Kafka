@@ -3,9 +3,10 @@ import json
 
 
 
-class Broker():
+class Broker:
+    """A class to implement functionalities of a broker."""
 
-    def __init__(self, *, hostname="localhost", port, zk_hostname, zk_port):
+    def __init__(self, *, hostname: str ="localhost", port: int, zk_hostname: str ="localhost", zk_port: int) -> None:
         self.hostname = hostname
         self.port = port
 
@@ -18,46 +19,50 @@ class Broker():
         self.server = None
         self.client = None
 
-    async def listen(self): 
+    async def setup(self) -> None: 
+        """Start listening for clients and connect to zookeeper."""
         async with asyncio.TaskGroup() as tg:
-            task1 = tg.create_task(self.setup_server())
+            task1 = tg.create_task(self.run_server())
             task2 = tg.create_task(self.run_client())
 
-    async def handle_echo(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-
-        print("Data received!")
+    async def client_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """Callback function to handle client connections from producer and consumers."""
         data = None
         running = True
-
+        print("connection is here")
         while running:
             data = await reader.read(1024)
             msg_d = data.decode()
             addr, port = writer.get_extra_info("peername")
-            message = json.loads(msg_d)
+            # message = json.loads(msg_d)
+            writer.write(b"Got message")
+            await writer.drain()
+            print(f"Message from {addr}:{port}: {msg_d!r}")
 
-            running = await self.handle_message(message, reader, writer)    
+            # running = await self.handle_message(message, reader, writer)    
 
 
-    async def setup_server(self):
-        server = await asyncio.start_server(self.handle_echo, self.hostname, self.port)
+    async def run_server(self) -> None:
+        """Start socket server to accept producer and consumer connections."""
+        server = await asyncio.start_server(self.client_connection, self.hostname, self.port)
         async with server:
             print(f"Started listening on port {self.port}")
             await server.serve_forever()
 
     async def run_client(self)-> None:
-        reader, writer = await asyncio.open_connection(self.zk_hostname, self.zk_port)
-        
-        print("CONNECTED TO ZOOKEEPER!")
+        """Connect socket client to zookeeper"""
+        try:
+            reader, writer = await asyncio.open_connection(self.zk_hostname, self.zk_port)
+        except ConnectionRefusedError:
+            print("Connnection to zookeeper failed.")
+            return
 
+        # Send broker server details to zookeeper.
         message = {
-            'topic':'BD',
-            'key':'69',
-            'value':'Working!'
-
+            "broker_id": 1
         }
         
         writer.write(json.dumps(message,ensure_ascii=False).encode("gbk"))
-        #writer.write(b"Hello World")
         await writer.drain()
 
         while True:
@@ -66,7 +71,7 @@ class Broker():
                 raise Exception("Socket Closed")
             print(f"Received: {data.decode()!r}")
 
-    async def handle_message(self, message: dict, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    async def handle_message(self, message: dict, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> bool:
         """
         Handle messages sent by producer/consumer.
 
