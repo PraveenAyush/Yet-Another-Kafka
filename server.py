@@ -7,25 +7,19 @@ PORT = 9999
 
 async def handle_echo(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
     data = None
-    passed = False
 
 
     while data != b"quit":
         data = await reader.read(1024)
+        if not data:
+            raise Exception("Socket Closed")
         msg = data.decode()
         addr, port = writer.get_extra_info("peername")
-        print(json.loads(msg))
-        #passed, error = func()
-        if passed == True:
-            writer.write(b"Acknowledgement from the server!")
-            await writer.drain()
-        else:
-            writer.write(b"THERE IS A PROBLEM")
-            await writer.drain()
+        print(f"Message from {addr}:{port}: {msg!r}")
 
 
-
-        #Run manage topics
+        writer.write(data)
+        await writer.drain()
         
 
     writer.close()
