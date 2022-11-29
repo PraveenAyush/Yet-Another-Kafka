@@ -1,6 +1,6 @@
 import asyncio
 import json
-
+from pathlib import Path
 
 class Broker:
     """A class to implement functionalities of a broker."""
@@ -18,6 +18,10 @@ class Broker:
         self.server = None
         self.client = None
 
+        # self.partitions = {0: }
+
+    def open_files():
+        pass
     async def setup(self) -> None: 
         """Start listening for clients and connect to zookeeper."""
         async with asyncio.TaskGroup() as tg:
@@ -100,4 +104,24 @@ class Broker:
         - True: continue collecting messages.
         - False: close the socket connection and stop receiving messages.
         """
-        ...
+        if message['type'] == "producer":
+            p = Path(message['topic'])
+            p.mkdir(exist_ok=True, parents=True)
+
+            file = Path(message['topic'], message['partition']+'.txt')
+
+            if not file.exists():
+                file.touch()
+            file.open('a')
+            with file.open('a') as f:
+                f.write(message['value'] + '\n')
+        
+        elif message['type'] == "consumer":
+            if message['full']:
+                p = Path(message['topic'])
+
+                for child in p.iterdir():
+                    writer.write(child.read_text())
+                    await writer.drain()
+            
+                
