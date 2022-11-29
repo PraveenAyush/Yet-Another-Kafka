@@ -2,7 +2,6 @@ import asyncio
 import json
 
 
-
 class Broker:
     """A class to implement functionalities of a broker."""
 
@@ -29,7 +28,6 @@ class Broker:
         """Callback function to handle client connections from producer and consumers."""
         data = None
         running = True
-        print("connection is here")
         while running:
             data = await reader.read(1024)
             msg_d = data.decode()
