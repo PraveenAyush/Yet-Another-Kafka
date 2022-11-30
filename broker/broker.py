@@ -1,6 +1,7 @@
 import asyncio
 import json
 from pathlib import Path
+from typing import Callable
 
 import aio_pika    
             
@@ -8,64 +9,49 @@ import aio_pika
 class Broker:
     """A class to implement functionalities of a broker."""
 
-    def __init__(self, *, hostname: str ="localhost", port: int, rmq_hostname: str ="localhost", rmq_port: int = 5672) -> None:
+    def __init__(self, *, broker_id, hostname: str ="localhost", port: int = 9001, zk_hostname: str = "localhost", zk_port: int = 9000) -> None:
+        self.broker_id = broker_id
         self.hostname = hostname
         self.port = port
 
-        self.rmq_hostname = rmq_hostname
-        self.rmq_port = rmq_port
+        self.broker_dict = {
+            "broker_id": self.broker_id,
+            "hostname": self.hostname,
+            "port": self.port
+        }
 
-        self.brokers = {}
+        self.zk_hostname = zk_hostname
+        self.zk_port = zk_port
+
+        self.zk_reader = None
+        self.zk_writer = None
+
+        self.data_path = Path("broker", "data")
+
+        self.broker_connections = {}
+
+        self.metadata = {}
         self.new_topics = set()
-
-        
 
 
     async def setup(self) -> None: 
         """Start listening for clients and connect to zookeeper."""
-        await asyncio.gather(self.connect_rmq(), self.run_server())
+        await asyncio.gather(self.run_client(), self.run_server())
 
     async def client_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """Callback function to handle client connections from producer and consumers."""
         data = None
         running = True
+
         while running:
             data = await reader.read(1024)
+            if data == "":
+                print("error")
+                break
             msg_d = data.decode()
-            addr, port = writer.get_extra_info("peername")
-            # message = json.loads(msg_d)
-            writer.write(b"Got message")
-            await writer.drain()
-            print(f"Message from {addr}:{port}: {msg_d!r}")
-
-    async def connect_rmq(self):
-        connection = await aio_pika.connect(hostname=self.rmq_hostname, port=self.rmq_port)
-        print("In rmq")
-        async with connection:
-            # Creating a channel
-            channel = await connection.channel()
-
-            broker_exchange = await channel.declare_exchange(
-                "broker_data", aio_pika.ExchangeType.FANOUT,
-            )
-            register_message = {
-                "broker_id": 0,
-                "hostname": self.hostname,
-                "port": self.port,
-            }
-            
-            register_message = json.dumps(register_message).encode()
-
-            message = aio_pika.Message(
-                register_message,
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-            )
-
-            # Sending the message
-            await broker_exchange.publish(message, routing_key="info")
-
-            print(f"[x] Sent {register_message}")
-
+            message = json.loads(msg_d)
+            print(message)
+            await self.handle_message(message, reader, writer)
 
     async def run_server(self) -> None:
         """Start socket server to accept producer and consumer connections."""
@@ -74,27 +60,44 @@ class Broker:
             print(f"Started listening on port {self.port}")
             await server.serve_forever()
 
+    async def send_message_zk(self, message: bytes, callback: Callable | None = None) -> None:
+        """Send message to zookeeper and handle immediately returned message."""
+        print("Sending message to zookeeper...")
+
+        self.zk_writer.write(message)
+        await self.zk_writer.drain()
+
+        data = await self.zk_reader.read(1024)
+        if not data:
+            raise Exception("Socket Closed")
+
+        data_parsed = json.loads(data.decode())
+
+        print("calling `Callback` function...")
+
+        if not callback:
+            return data_parsed
+
+        callback(data_parsed)
+
     async def run_client(self)-> None:
         """Connect socket client to zookeeper"""
         try:
-            reader, writer = await asyncio.open_connection(self.zk_hostname, self.zk_port)
-        except ConnectionRefusedError:
+            self.zk_reader, self.zk_writer = await asyncio.open_connection(self.zk_hostname, self.zk_port)
+        except Exception as e:
             print("Connnection to zookeeper failed.")
             return
 
         # Send broker server details to zookeeper.
-        message = {
-            "broker_id": 1
+        register_broker_data = self.broker_dict | {
+            "protocol": "register"
         }
-        
-        writer.write(json.dumps(message,ensure_ascii=False).encode("gbk"))
-        await writer.drain()
 
-        while True:
-            data = await reader.read(1024)
-            if not data:
-                raise Exception("Socket Closed")
-            print(f"Received: {data.decode()!r}")
+        data = await self.send_message_zk(
+            json.dumps(register_broker_data).encode(),
+        )
+
+        self.metadata = data
 
     async def handle_message(self, message: dict, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> bool:
         """
@@ -127,30 +130,52 @@ class Broker:
         - True: continue collecting messages.
         - False: close the socket connection and stop receiving messages.
         """
-        if message['type'] == "producer":
-            p = Path(message['topic'])
+        match message["protocol"]:
 
-            if not p.exists():
-                self.new_topics.add(message['topic'])
+            case "metadata":
+                print("Sending metadata")
+                print(self.metadata)
+                msg = {
+                    "protocol": "metadata",
+                    "metadata": self.metadata
+                }
+                writer.write(json.dumps(msg).encode())
+                await writer.drain()
 
-            p.mkdir(exist_ok=True, parents=True)
+            case "new_topic":
+                register_new_topic = self.broker_dict | {
+                    "protocol": "new_topic",
+                    "new_topic": message["topic"]
+                }
+                data = await self.send_message_zk(
+                    json.dumps(register_new_topic).encode()
+                )
+                self.metadata = data
 
-            file = Path(message['topic'], message['partition']+'.txt')
-
-            if not file.exists():
-                file.touch()
-            file.open('a')
-            with file.open('a') as f:
-                f.write(message['value'] + '\n')
-            
-            self.topics.add(message['topic'])
-            writer.write(json.dumps(message).encode())  
-            await writer.drain() 
+                msg = {
+                    "protocol": "metadata",
+                    "metadata": self.metadata
+                }
+                writer.write(json.dumps(msg).encode())
+                await writer.drain()
         
-        elif message['type'] == "consumer":
-            if message['full']:
-                p = Path(message['topic'])
+            case "produce":
+                p = Path(self.data_path, message['topic'])
+                if not p.exists():
+                    self.new_topics.add(message["topic"])
 
-                for child in p.iterdir():
-                    writer.write(child.read_text())
-                    await writer.drain()
+                p.mkdir(exist_ok=True, parents=True)
+
+                file = Path(p, str(message['partition'])+'.txt')
+                if not file.exists():
+                    file.touch()
+
+                with file.open('a') as f:
+                    f.write(message['value'] + '\n')
+                
+                ack_msg = {
+                    "protocol": "ack",
+                    "ack": 1
+                }
+                writer.write(json.dumps(ack_msg).encode())
+                await writer.drain()

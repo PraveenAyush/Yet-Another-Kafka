@@ -25,6 +25,7 @@ args = producer_parse.parse_args()
 
 async def main() -> None:
     """Run producer server."""
+
     topic = args.topic
     key = args.key
 

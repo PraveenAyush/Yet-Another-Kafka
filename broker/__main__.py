@@ -4,7 +4,7 @@ from broker import Broker
 
 async def main() -> None:
     """Run broker server."""
-    broker = Broker(port=900)
+    broker = Broker(broker_id=0, port=9001)
     await broker.setup()
 
 if __name__ == "__main__":

@@ -1,70 +1,124 @@
 import asyncio
 import json
-from collections import defaultdict
+from copy import deepcopy
+from itertools import cycle
 
-import aio_pika
+from async_timeout import timeout
 
 
 class ZooKeeper:
 
-    def __init__(self, *, rmq_hostname="localhost", rmq_port=5672):
-
-        self.rmq_hostname = rmq_hostname
-        self.rmq_port = rmq_port
+    def __init__(self, *, hostname="localhost", port=9000):
+        
+        self.hostname = hostname
+        self.port = port
 
         self.broker_metadata = {}
         self.topic_metadata = {}
 
-        self.broker_timeout = 10
         self.broker_availability = {}
 
 
-    async def setup(self):
-        pass
+    def get_metadata(self) -> bytes:
+        combined_metadata = {"brokers": self.broker_metadata} | {"topics": self.topic_metadata}
+        return json.dumps(combined_metadata).encode()
 
-    async def broker_data(self, message: aio_pika.abc.AbstractIncomingMessage) -> None:
+    async def client_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """
-        {
-            broker_id: int,
-            hostname: str,
-            port: int
-        }
+        Callback function to handle client connections from producer and consumers.
+        
+        Protocols:
+        - New connection
+        - New topic
+        - metadata
         """
-        async with message.process():
-            print(message)
-            msg = message.body.decode()
-            msg = json.loads(msg)
+        data = None
+        broker_id = None
 
-            if msg["broker_id"] not in self.broker_metadata:
-                self.broker_metadata[msg["broker_id"]] = {
-                    "hostname": msg["hostname"],
-                    "port": msg["port"]
-                }
+        try:
+            while True:
+                data = await reader.read(1024)
+                msg_d = data.decode()
 
-                print(self.broker_metadata)
+                if msg_d == "":
+                    raise asyncio.TimeoutError()
+                msg = json.loads(msg_d)
 
-    async def start(self) -> None:
-        # Perform connection
-        connection = await aio_pika.connect(host=self.rmq_hostname, port=self.rmq_port)
+                print(f"Received protocol `{msg['protocol']}` from broker {msg['broker_id']}")
 
-        async with connection:
-            # Creating a channel
-            channel = await connection.channel()
-            await channel.set_qos(prefetch_count=1)
+                match msg["protocol"]:
 
-            broker_exchange = await channel.declare_exchange(
-                "broker_data", aio_pika.ExchangeType.FANOUT,
-            )
+                    case "register":
+                        broker_id = msg["broker_id"]
 
-            # Declaring queue
-            queue = await channel.declare_queue(exclusive=True)
+                        if msg["broker_id"] not in self.broker_metadata:
+                            self.broker_metadata[msg["broker_id"]] = {
+                                "hostname": msg["hostname"],
+                                "port": msg["port"],
+                            }
 
-            # Binding the queue to the exchange
-            await queue.bind(broker_exchange)
+                        writer.write(self.get_metadata())
+                        await writer.drain()
 
-            # Start listening the queue
-            await queue.consume(self.broker_data)
+                    case "new_topic":
+                        if topic := msg["new_topic"]:
+                            self.topic_metadata[topic] = self.generate_partition_metadata(topic)
+                        
+                        writer.write(self.get_metadata())
+                        await writer.drain()
 
-            print("[*] Waiting for logs. To exit press CTRL+C")
-            await asyncio.Future()
+                    case "metadata":
+                        writer.write(self.get_metadata())
+                        await writer.drain()
+
+                    case "heartbeat":
+                        print(f"{msg['broker_id']} is alive.")
+
+                        heartbeat_ack = {
+                            "protocol": "heartbeat",
+                            "status": 1
+                        }
+                        writer.write(json.dumps(heartbeat_ack).encode())
+                        await writer.drain()
+
+                    case _:
+                        print("no message")
+
+        except Exception as e:
+            print(type(e))
+            print(f"Broker {broker_id} died.")
+
+            if len(self.broker_metadata) > 1:
+                self.topic_metadata = self.elect_new_leader(broker_id)
+
+    def elect_new_leader(self, dead_broker_id):
+        print("electing")
+        new = deepcopy(self.topic_metadata)
+        remaining_brokers = cycle([broker for broker in self.broker_metadata if broker != dead_broker_id])
+        for topic, partition in self.topic_metadata.items():
+            for partition_id, value in partition.items():
+                if value == dead_broker_id:
+                    new[topic][partition_id] = next(remaining_brokers)
+
+        return new
+        
+
+    def generate_partition_metadata(self, topic):
+        metadata = {}
+
+        for i, broker in enumerate(self.broker_metadata):
+            metadata[i] = broker
+
+            self.broker_metadata
+
+        return metadata
+        
+
+
+    async def run_server(self) -> None:
+        """Start socket server to accept producer and consumer connections."""
+        server = await asyncio.start_server(self.client_connection, self.hostname, self.port)
+        async with server:
+            print(f"Started listening on port {self.port}")
+            await server.serve_forever()
 
