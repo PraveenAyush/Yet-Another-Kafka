@@ -29,7 +29,7 @@ async def main() -> None:
     topic = args.topic
     key = args.key
     
-    publisher = Producer('localhost',9001,topic,key)
+    publisher = Producer('localhost',9003,topic,key)
     await publisher.run_client()
     await publisher.input_messages()
 

@@ -18,6 +18,7 @@ class Producer:
         self.broker_connections = {}
 
         self.metadata = {}
+        self.pending = None
 
     def get_broker_url(self, broker_id: int | None = None):
         if not broker_id:
@@ -26,13 +27,15 @@ class Producer:
         broker = self.metadata["brokers"][str(broker_id)]
         return f"{broker['hostname']}:{broker['port']}"
 
-    def get_partition_id(self):
+    def set_partition_id(self):
+        if self.pending:
+            return
         if not self.key:
-            return next(self.cycle)
-        self.partition = (len(self.key)%3)
-        return self.partition
+            self.partition = next(self.cycle)
+        else:
+            self.partition = (len(self.key)%3)
 
-    async def send_message_broker(self, broker_id: int, message: bytes, callback: Callable | None = None):
+    async def send_message_broker(self, broker_id: int | None, message: bytes, callback: Callable | None = None):
         broker_url = self.get_broker_url(broker_id)
         print(self.broker_connections)
         
@@ -69,15 +72,12 @@ class Producer:
                 self.metadata = msg["metadata"]
 
                 print("Metadata: ", self.metadata)
-
                 if self.topic not in self.metadata['topics']:
                     new_topic_msg = {
                         "protocol": "new_topic",
                         "topic": self.topic
                     }
-                    await self.send_message_broker(self.get_broker_url(), json.dumps(new_topic_msg).encode())
-
-                    
+                    await self.send_message_broker(None, json.dumps(new_topic_msg).encode())
       
     async def run_client(self)-> None:
         reader, writer = await asyncio.open_connection(self.hostname, self.port)
@@ -102,20 +102,36 @@ class Producer:
     async def input_messages(self):
         print("Enter q! to quit")
         while True:
-            msg = input("Enter a message: ")
+            if self.pending is None:
+                msg = input("Enter a message: ")
+            else:
+                msg = self.pending
 
             if msg == "q!":
                 break
 
-            partition = self.partition or self.get_partition_id()
+            self.set_partition_id()
+
+            self.pending = None
+
             message = {
                 "protocol": "produce",
                 'topic': self.topic,
-                'partition' : partition,
+                'partition' : self.partition,
                 'value': msg
             }
 
-            broker_id = self.metadata["topics"][self.topic][str(partition)]
+            broker_id = self.metadata["topics"][self.topic][str(self.partition)]
+            try:
+                await self.send_message_broker(broker_id, json.dumps(message).encode())
+            except Exception as e:
+                print("socket closed, fetch metadata and send to new leader if available.")
+                del self.metadata["brokers"][str(broker_id)]
 
-            await self.send_message_broker(broker_id, json.dumps(message).encode())
-        
+                metadata_msg = {
+                    "protocol": "metadata"
+                }
+                print(self.metadata)
+                print(list(self.metadata["brokers"].keys())[0])
+                await self.send_message_broker(list(self.metadata["brokers"].keys())[0], json.dumps(metadata_msg).encode())
+                self.pending = msg

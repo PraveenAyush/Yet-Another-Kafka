@@ -3,8 +3,10 @@ import json
 from copy import deepcopy
 from itertools import cycle
 
+import aioredis
 from async_timeout import timeout
 
+import traceback
 
 class ZooKeeper:
 
@@ -18,10 +20,12 @@ class ZooKeeper:
 
         self.broker_availability = {}
 
+        self.redis = aioredis.from_url("redis://localhost")
 
-    def get_metadata(self) -> bytes:
+
+    def get_metadata(self) -> str:
         combined_metadata = {"brokers": self.broker_metadata} | {"topics": self.topic_metadata}
-        return json.dumps(combined_metadata).encode()
+        return json.dumps(combined_metadata)
 
     async def client_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """
@@ -56,20 +60,21 @@ class ZooKeeper:
                                 "hostname": msg["hostname"],
                                 "port": msg["port"],
                             }
-
-                        writer.write(self.get_metadata())
+                        return_dict = {
+                            "message": "Broker registered with zookeeper. Metadata published."
+                        }
+                        writer.write(json.dumps(return_dict).encode())
                         await writer.drain()
+                        await self.redis.publish("metadata", self.get_metadata())
 
                     case "new_topic":
                         if topic := msg["new_topic"]:
                             self.topic_metadata[topic] = self.generate_partition_metadata(topic)
                         
-                        writer.write(self.get_metadata())
+                        writer.write(json.dumps(self.get_metadata()).encode())
                         await writer.drain()
 
-                    case "metadata":
-                        writer.write(self.get_metadata())
-                        await writer.drain()
+                        await self.redis.publish("metadata", self.get_metadata())
 
                     case "heartbeat":
                         print(f"{msg['broker_id']} is alive.")
@@ -78,18 +83,22 @@ class ZooKeeper:
                             "protocol": "heartbeat",
                             "status": 1
                         }
-                        writer.write(json.dumps(heartbeat_ack).encode())
-                        await writer.drain()
+                        # writer.write(json.dumps(heartbeat_ack).encode())
+                        # await writer.drain()
 
                     case _:
                         print("no message")
 
         except Exception as e:
-            print(type(e))
+            print(type(e), str(e))
             print(f"Broker {broker_id} died.")
+            print(self.broker_metadata)
+            del self.broker_metadata[broker_id]
 
             if len(self.broker_metadata) > 1:
                 self.topic_metadata = self.elect_new_leader(broker_id)
+
+                await self.redis.publish("metadata", self.get_metadata())
 
     def elect_new_leader(self, dead_broker_id):
         print("electing")

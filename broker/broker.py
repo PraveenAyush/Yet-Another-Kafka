@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Callable
 
 import aioredis
+import async_timeout
 
 
 class Broker:
@@ -35,10 +36,40 @@ class Broker:
         self.metadata = {}
         self.new_topics = set()
 
+        self.pubsub = self.redis.pubsub()
+
 
     async def setup(self) -> None: 
         """Start listening for clients and connect to zookeeper."""
-        await asyncio.gather(self.run_client(), self.run_server())
+        await self.pubsub.subscribe("metadata", "update_replica")
+        await asyncio.gather(self.run_client(), self.run_server(), self.reader())
+
+    async def reader(self):
+        print("redis subscribed...")
+        while True:
+            try:
+                async with async_timeout.timeout(1):
+                    message = await self.pubsub.get_message(ignore_subscribe_messages=True)
+                    if message is not None:
+                        channel = message["channel"].decode()
+                        print("Channel", channel)
+                        match channel:
+
+                            case "metadata":
+                                self.metadata = json.loads(message["data"].decode())
+                                print("redis metadata received")
+                                print(self.metadata)
+
+                            case "update_replica":
+                                produce_data = json.loads(message["data"].decode())
+                                print("got replica update.")
+                                print(produce_data)
+                                if produce_data["broker_id"] != self.broker_id:
+                                    await self.handle_produce(produce_data["topic"], produce_data["partition"], produce_data["value"], False)
+
+                    await asyncio.sleep(0.01)
+            except asyncio.TimeoutError:
+                pass
 
 
     async def client_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -100,7 +131,29 @@ class Broker:
             json.dumps(register_broker_data).encode(),
         )
 
-        self.metadata = data
+        print(data)
+
+    async def handle_produce(self, topic, partition, value, publish: bool = True):
+        if publish:
+            print("redis before")
+            await self.redis.publish(topic, value)
+            print("redis after")
+
+        p = Path(self.data_path, topic)
+        if not p.exists():
+            self.new_topics.add(topic)
+
+        p.mkdir(exist_ok=True, parents=True)
+
+        file = Path(p, str(partition)+'.txt')
+        if not file.exists():
+            file.touch()
+
+        with file.open('a') as f:
+            f.write(value + '\n')
+
+        print(file)
+
 
     async def handle_message(self, message: dict, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> bool:
         """
@@ -109,24 +162,16 @@ class Broker:
         # Request Metadata
         ## Request
         {
-            type: "metadata"
+            protocol: "metadata"
         }
 
         # Producer sending message
         ## Request
         {
-            type: "producer",
+            protocol: "producer",
             topic: ...,
             partition: ...,
             value: ...
-        }
-
-        # Consumer requesting for messages
-        ## Request
-        {
-            type: "consumer",
-            topic: ...,
-            full: bool,
         }
 
         # Returns True or False
@@ -163,31 +208,26 @@ class Broker:
                 await writer.drain()
         
             case "produce":
-                print("redis before")
-                await self.redis.publish(message['topic'], message['value'])
-                print("redis after")
-
-                p = Path(self.data_path, message['topic'])
-                if not p.exists():
-                    self.new_topics.add(message["topic"])
-
-                p.mkdir(exist_ok=True, parents=True)
-
-                file = Path(p, str(message['partition'])+'.txt')
-                if not file.exists():
-                    file.touch()
-
-                with file.open('a') as f:
-                    f.write(message['value'] + '\n')
-
-                print(file)
-                
+                await self.handle_produce(message["topic"], message["partition"], message["value"])
+                print("before publish")
+                publish_dict = {
+                    "broker_id": self.broker_id,
+                    "topic": message['topic'],
+                    "partition": message['partition'],
+                    "value": message['value']
+                }
+                await self.redis.publish(
+                    "update_replica",
+                    json.dumps(publish_dict)
+                )
+                print("after publish")
                 ack_msg = {
                     "protocol": "ack",
                     "ack": 1
                 }
                 writer.write(json.dumps(ack_msg).encode())
                 await writer.drain()
+                print("done drain")
 
             case "from_beginning":
                 p = Path(self.data_path, message['topic'])
