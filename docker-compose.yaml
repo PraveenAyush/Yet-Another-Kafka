@@ -1,0 +1,71 @@
+version: "3.9"
+services:
+  redis:
+      image: 'bitnami/redis:latest'
+      environment:
+        - ALLOW_EMPTY_PASSWORD=yes
+      ports:
+        - "6379:6379"
+
+  zookeeper:
+    build:
+      context: .
+      dockerfile: zookeeper.Dockerfile
+    ports:
+      - "127.0.0.1:9000:9000"
+
+    depends_on:
+      - redis
+
+    tty: true
+
+  broker_1:
+    build:
+      context: .
+      dockerfile: broker.Dockerfile
+    command: python __main__.py 0 9001
+    ports:
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - ./data_1:/app/data
+    environment:
+      port: 9001
+    depends_on:
+      - redis
+      - zookeeper
+
+    tty: true
+
+  broker_2:
+    build:
+      context: .
+      dockerfile: broker.Dockerfile
+    command: python __main__.py 1 9001
+    ports:
+      - "127.0.0.1:9002:9001"
+    volumes:
+      - ./data_2:/app/data
+    environment:
+      port: 9002
+    depends_on:
+      - redis
+      - zookeeper
+
+    tty: true
+
+  broker_3:
+    build:
+      context: .
+      dockerfile: broker.Dockerfile
+    command: python __main__.py 2 9001
+    ports:
+      - "127.0.0.1:9003:9001"
+    volumes:
+      - ./data_3:/app/data
+    environment:
+      port: 9003
+    depends_on:
+      - redis
+      - zookeeper
+
+    tty: true

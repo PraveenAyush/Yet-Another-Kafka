@@ -10,7 +10,7 @@ import async_timeout
 class Broker:
     """A class to implement functionalities of a broker."""
 
-    def __init__(self, *, broker_id, hostname: str ="localhost", port: int = 9001, zk_hostname: str = "localhost", zk_port: int = 9000) -> None:
+    def __init__(self, *, broker_id, hostname: str ="0.0.0.0", port: int = 9001, zk_hostname: str = "zookeeper", zk_port: int = 9000) -> None:
         self.broker_id = broker_id
         self.hostname = hostname
         self.port = port
@@ -24,7 +24,7 @@ class Broker:
         self.zk_hostname = zk_hostname
         self.zk_port = zk_port
         
-        self.redis = aioredis.from_url("redis://localhost")
+        self.redis = aioredis.from_url("redis://redis")
 
         self.zk_reader = ...
         self.zk_writer = ...

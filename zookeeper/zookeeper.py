@@ -10,7 +10,7 @@ import traceback
 
 class ZooKeeper:
 
-    def __init__(self, *, hostname="localhost", port=9000):
+    def __init__(self, *, hostname="0.0.0.0", port=9000):
         
         self.hostname = hostname
         self.port = port
@@ -20,7 +20,7 @@ class ZooKeeper:
 
         self.broker_availability = {}
 
-        self.redis = aioredis.from_url("redis://localhost")
+        self.redis = aioredis.from_url("redis://redis")
 
 
     def get_metadata(self) -> str:
