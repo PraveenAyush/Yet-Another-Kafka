@@ -6,7 +6,8 @@ authors = ["Your Name <you@example.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = ">=3.10"
+python = ">=3.10, <3.10.9"
+aio-pika = "^8.2.5"
 
 [tool.poetry.dev-dependencies]
 

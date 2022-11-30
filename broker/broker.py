@@ -2,31 +2,28 @@ import asyncio
 import json
 from pathlib import Path
 
+import aio_pika    
+            
+                
 class Broker:
     """A class to implement functionalities of a broker."""
 
-    def __init__(self, *, hostname: str ="localhost", port: int, zk_hostname: str ="localhost", zk_port: int) -> None:
+    def __init__(self, *, hostname: str ="localhost", port: int, rmq_hostname: str ="localhost", rmq_port: int = 5672) -> None:
         self.hostname = hostname
         self.port = port
 
-        self.zk_hostname = zk_hostname
-        self.zk_port = zk_port
+        self.rmq_hostname = rmq_hostname
+        self.rmq_port = rmq_port
 
-        self.metadata = {}
-        self.consumers = {}
+        self.brokers = {}
+        self.topics = {}
 
-        self.server = None
-        self.client = None
+        
 
-        # self.partitions = {0: }
 
-    def open_files():
-        pass
     async def setup(self) -> None: 
         """Start listening for clients and connect to zookeeper."""
-        async with asyncio.TaskGroup() as tg:
-            task1 = tg.create_task(self.run_server())
-            task2 = tg.create_task(self.run_client())
+        await asyncio.gather(self.connect_rmq(), self.run_server())
 
     async def client_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """Callback function to handle client connections from producer and consumers."""
@@ -41,7 +38,33 @@ class Broker:
             await writer.drain()
             print(f"Message from {addr}:{port}: {msg_d!r}")
 
-            # running = await self.handle_message(message, reader, writer)    
+    async def connect_rmq(self):
+        connection = await aio_pika.connect(hostname=self.rmq_hostname, port=self.rmq_port)
+        print("In rmq")
+        async with connection:
+            # Creating a channel
+            channel = await connection.channel()
+
+            broker_exchange = await channel.declare_exchange(
+                "broker_data", aio_pika.ExchangeType.FANOUT,
+            )
+            register_message = {
+                "broker_id": 0,
+                "hostname": self.hostname,
+                "port": self.port,
+            }
+            
+            register_message = json.dumps(register_message).encode()
+
+            message = aio_pika.Message(
+                register_message,
+                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+            )
+
+            # Sending the message
+            await broker_exchange.publish(message, routing_key="info")
+
+            print(f"[x] Sent {register_message}")
 
 
     async def run_server(self) -> None:
@@ -123,5 +146,3 @@ class Broker:
                 for child in p.iterdir():
                     writer.write(child.read_text())
                     await writer.drain()
-            
-                
