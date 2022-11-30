@@ -45,7 +45,6 @@ class Producer:
                 case 'ack':
                     print("Ack receieved: ", msg["ack"])
 
-
                 case "metadata":
                     self.metadata = msg["metadata"]
     
@@ -61,8 +60,6 @@ class Producer:
                         await writer.drain()
                         continue
 
-            
-
             msg = input("Enter a message: ")
             message = {
                 "protocol": "produce",
@@ -72,11 +69,4 @@ class Producer:
             }
             writer.write(json.dumps(message).encode())
             await writer.drain()
-
-    # async def setup(self) -> None: 
-    #     """Start sending for the server"""
-    #     async with asyncio.TaskGroup() as tg:
-    #         task1 = tg.create_task(self.run_client())
-
-
         

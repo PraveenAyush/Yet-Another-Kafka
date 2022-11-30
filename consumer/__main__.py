@@ -1,4 +1,7 @@
 import argparse
+import asyncio
+
+from consumer import Consumer
 
 # Create the parser
 consumer_parse = argparse.ArgumentParser(
@@ -19,3 +22,23 @@ consumer_parse.add_argument('--from-beginning',
 
 # Execute the parse_args() method
 args = consumer_parse.parse_args()
+
+
+async def main() -> None:
+    topic: str = args.topic
+    from_beginning: bool = args.from_beginning
+
+    consumer = Consumer(
+        topic=topic,
+        redis_url="redis://localhost",
+        from_beginning=from_beginning,
+        hostname="localhost",
+        port=9001
+    )
+    if from_beginning:
+        await consumer.get_from_beginning()
+    await consumer.consume()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

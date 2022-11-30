@@ -1,7 +1,7 @@
+import argparse
 import asyncio
 
 from producer import Producer
-import argparse
 
 # Create the parser
 producer_parse = argparse.ArgumentParser(
@@ -28,9 +28,9 @@ async def main() -> None:
 
     topic = args.topic
     key = args.key
-
-    publisher = Producer('localhost',9999,topic,key)
-    await publisher.setup()
+    
+    publisher = Producer('localhost',9001,topic,key)
+    await publisher.run_client()
 
 if __name__ == "__main__":
     asyncio.run(main())

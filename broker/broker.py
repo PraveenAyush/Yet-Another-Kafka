@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 from typing import Callable
 
+import aioredis
+
 
 class Broker:
     """A class to implement functionalities of a broker."""
@@ -20,9 +22,11 @@ class Broker:
 
         self.zk_hostname = zk_hostname
         self.zk_port = zk_port
+        
+        self.redis = aioredis.from_url("redis://localhost")
 
-        self.zk_reader = None
-        self.zk_writer = None
+        self.zk_reader = ...
+        self.zk_writer = ...
 
         self.data_path = Path("broker", "data")
 
@@ -35,6 +39,7 @@ class Broker:
     async def setup(self) -> None: 
         """Start listening for clients and connect to zookeeper."""
         await asyncio.gather(self.run_client(), self.run_server())
+
 
     async def client_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """Callback function to handle client connections from producer and consumers."""
@@ -158,6 +163,10 @@ class Broker:
                 await writer.drain()
         
             case "produce":
+                print("redis before")
+                await self.redis.publish(message['topic'], message['value'])
+                print("redis after")
+
                 p = Path(self.data_path, message['topic'])
                 if not p.exists():
                     self.new_topics.add(message["topic"])
@@ -177,3 +186,11 @@ class Broker:
                 }
                 writer.write(json.dumps(ack_msg).encode())
                 await writer.drain()
+
+            case "from_beginning":
+                p = Path(self.data_path, message['topic'])
+
+                for child in p.iterdir():
+                    for value in child.read_text().strip().split("\n"):
+                        writer.write(f"{value}\n".encode())
+                        await writer.drain()
