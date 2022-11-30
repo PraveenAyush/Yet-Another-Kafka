@@ -1,33 +1,27 @@
 import asyncio
 import json
-from collections import defaultdict
 from copy import deepcopy
-
-import aio_pika
-from async_timeout import timeout
-
 from itertools import cycle
+
+from async_timeout import timeout
 
 
 class ZooKeeper:
 
-    def __init__(self, *, hostname="localhost", port=9000, rmq_hostname="localhost", rmq_port=5672):
+    def __init__(self, *, hostname="localhost", port=9000):
         
         self.hostname = hostname
         self.port = port
 
-        self.rmq_hostname = rmq_hostname
-        self.rmq_port = rmq_port
-
         self.broker_metadata = {}
         self.topic_metadata = {}
 
-        self.broker_timeout = 10
         self.broker_availability = {}
 
 
-    async def handle_heartbeat(self):
-        pass
+    def get_metadata(self) -> bytes:
+        combined_metadata = {"brokers": self.broker_metadata} | {"topics": self.topic_metadata}
+        return json.dumps(combined_metadata).encode()
 
     async def client_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """
@@ -42,37 +36,53 @@ class ZooKeeper:
         broker_id = None
 
         try:
-
             while True:
                 data = await reader.read(1024)
                 msg_d = data.decode()
 
                 if msg_d == "":
                     raise asyncio.TimeoutError()
-
                 msg = json.loads(msg_d)
 
+                print(f"Received protocol `{msg['protocol']}` from broker {msg['broker_id']}")
 
+                match msg["protocol"]:
 
-                broker_id = msg["broker_id"]
+                    case "register":
+                        broker_id = msg["broker_id"]
 
-                if msg["broker_id"] not in self.broker_metadata:
-                    self.broker_metadata[msg["broker_id"]] = {
-                        "hostname": msg["hostname"],
-                        "port": msg["port"],
-                    }
+                        if msg["broker_id"] not in self.broker_metadata:
+                            self.broker_metadata[msg["broker_id"]] = {
+                                "hostname": msg["hostname"],
+                                "port": msg["port"],
+                            }
 
-                print(msg["new_topics"])
-                if msg["new_topics"]:
-                    for topic in msg["new_topics"]:
-                        self.topic_metadata[topic] = self.generate_partition_metadata(topic)
+                        writer.write(self.get_metadata())
+                        await writer.drain()
+
+                    case "new_topic":
+                        if topic := msg["new_topic"]:
+                            self.topic_metadata[topic] = self.generate_partition_metadata(topic)
                         
+                        writer.write(self.get_metadata())
+                        await writer.drain()
 
-                await asyncio.sleep(2)
-                total_meta = {"brokers": self.broker_metadata} | {"topics": self.topic_metadata}
-                writer.write(json.dumps(total_meta).encode())
-                t2 = asyncio.create_task(writer.drain())
-                await asyncio.wait_for(t2, timeout=5)
+                    case "metadata":
+                        writer.write(self.get_metadata())
+                        await writer.drain()
+
+                    case "heartbeat":
+                        print(f"{msg['broker_id']} is alive.")
+
+                        heartbeat_ack = {
+                            "protocol": "heartbeat",
+                            "status": 1
+                        }
+                        writer.write(json.dumps(heartbeat_ack).encode())
+                        await writer.drain()
+
+                    case _:
+                        print("no message")
 
         except Exception as e:
             print(type(e))
@@ -111,50 +121,4 @@ class ZooKeeper:
         async with server:
             print(f"Started listening on port {self.port}")
             await server.serve_forever()
-
-    # async def broker_data(self, message: aio_pika.abc.AbstractIncomingMessage) -> None:
-    #     """
-    #     {
-    #         broker_id: int,
-    #         hostname: str,
-    #         port: int
-    #     }
-    #     """
-    #     async with message.process():
-    #         print(message)
-    #         msg = message.body.decode()
-    #         msg = json.loads(msg)
-
-    #         if msg["broker_id"] not in self.broker_metadata:
-    #             self.broker_metadata[msg["broker_id"]] = {
-    #                 "hostname": msg["hostname"],
-    #                 "port": msg["port"]
-    #             }
-
-    #             print(self.broker_metadata)
-
-    # async def start(self) -> None:
-    #     # Perform connection
-    #     connection = await aio_pika.connect(host=self.rmq_hostname, port=self.rmq_port)
-
-    #     async with connection:
-    #         # Creating a channel
-    #         channel = await connection.channel()
-    #         await channel.set_qos(prefetch_count=1)
-
-    #         broker_exchange = await channel.declare_exchange(
-    #             "broker_data", aio_pika.ExchangeType.FANOUT,
-    #         )
-
-    #         # Declaring queue
-    #         queue = await channel.declare_queue(exclusive=True)
-
-    #         # Binding the queue to the exchange
-    #         await queue.bind(broker_exchange)
-
-    #         # Start listening the queue
-    #         await queue.consume(self.broker_data)
-
-    #         print("[*] Waiting for logs. To exit press CTRL+C")
-    #         await asyncio.Future()
 

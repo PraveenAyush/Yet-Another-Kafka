@@ -13,12 +13,8 @@ class Producer:
         self.key = key
         self.partition = None
         self.cycle = cycle([0, 1, 2])
-        
 
         self.metadata = {}
-
-        
-
     
     def get_partition_id(self):
         if not self.key:
@@ -30,7 +26,7 @@ class Producer:
         reader, writer = await asyncio.open_connection(self.hostname, self.port)
 
         metadata_msg = {
-            "type": "metadata"
+            "protocol": "metadata"
         }
         writer.write(json.dumps(metadata_msg).encode())
         await writer.drain()
@@ -44,29 +40,32 @@ class Producer:
 
             msg = json.loads(data.decode())
 
-            if msg["type"] == "ack":
-                print("Ack receieved: ", msg["ack"])
+            match msg["protocol"]:
 
-            if msg["type"] == "metadata":
-                print("Received metadata")
-                self.metadata = msg["metadata"]
-                print(self.metadata)
+                case 'ack':
+                    print("Ack receieved: ", msg["ack"])
 
-                if self.topic not in self.metadata['topics']:
-                    new_topic_msg = {
-                        "type": "new_topic",
-                        "topic": self.topic
-                    }
 
-                    writer.write(json.dumps(new_topic_msg).encode())
-                    await writer.drain()
-                    continue
+                case "metadata":
+                    self.metadata = msg["metadata"]
+    
+                    print("Metadata: ", self.metadata)
+
+                    if self.topic not in self.metadata['topics']:
+                        new_topic_msg = {
+                            "protocol": "new_topic",
+                            "topic": self.topic
+                        }
+
+                        writer.write(json.dumps(new_topic_msg).encode())
+                        await writer.drain()
+                        continue
 
             
 
             msg = input("Enter a message: ")
             message = {
-                "type": "producer",
+                "protocol": "produce",
                 'topic': self.topic,
                 'partition' : self.partition or self.get_partition_id(),
                 'value': msg
