@@ -1,4 +1,5 @@
 import asyncio
+import sys
 import json
 from itertools import cycle
 from typing import Callable
@@ -7,13 +8,15 @@ from typing import Callable
 class Producer:
     
 
-    def __init__(self,hostname,port,topic,key=None) -> None:
+    def __init__(self,hostname,port,topic,key=None, has_input=False) -> None:
         self.hostname = hostname
         self.port = port
         self.topic = topic
         self.key = key
         self.partition = None
         self.cycle = cycle([0, 1, 2])
+
+        self.has_input = has_input
 
         self.broker_connections = {}
 
@@ -43,7 +46,7 @@ class Producer:
             writer = self.broker_connections[broker_url]["writer"]
             reader = self.broker_connections[broker_url]["reader"]
         except KeyError:
-            print("Got key error, establishing connection.")
+            print(f"Got key error, establishing connection to leader broker {broker_url}.")
             reader, writer = await asyncio.open_connection(
                 self.metadata["brokers"][str(broker_id)]["hostname"],
                 self.metadata["brokers"][str(broker_id)]["port"]
@@ -58,10 +61,25 @@ class Producer:
         await writer.drain()
 
         data = await reader.read(1024)
-        if not data:
-            raise Exception("Socket Closed")
-        data_d = json.loads(data.decode())
-        await self.handle_message(data_d)
+        try:
+            if not data:
+                raise Exception("Socket Closed")
+            data_d = json.loads(data.decode())
+            await self.handle_message(data_d)
+        except Exception as e:
+            print(type(e), str(e))
+            print("socket closed, fetch metadata and send to new leader if available.")
+            del self.metadata["brokers"][str(broker_id)]
+
+            metadata_msg = {
+                "protocol": "metadata"
+            }
+            print(self.metadata)
+            print(list(self.metadata["brokers"].keys())[0])
+            await self.send_message_broker(list(self.metadata["brokers"].keys())[0], json.dumps(metadata_msg).encode())
+            self.pending = message.decode()
+
+
 
     async def handle_message(self, msg) -> None:
         match msg["protocol"]:
@@ -99,17 +117,7 @@ class Producer:
         data_d = json.loads(data.decode())
         await self.handle_message(data_d)
 
-    async def input_messages(self):
-        print("Enter q! to quit")
-        while True:
-            if self.pending is None:
-                msg = input("Enter a message: ")
-            else:
-                msg = self.pending
-
-            if msg == "q!":
-                break
-
+    async def send_message(self, msg):
             self.set_partition_id()
 
             self.pending = None
@@ -136,3 +144,27 @@ class Producer:
                 print(list(self.metadata["brokers"].keys())[0])
                 await self.send_message_broker(list(self.metadata["brokers"].keys())[0], json.dumps(metadata_msg).encode())
                 self.pending = msg
+
+    async def input_messages(self):
+        if self.has_input:
+            for line in sys.stdin:
+                await self.send_message(line.strip())
+
+        else:
+                
+            print("Enter q! to quit")
+            while True:
+                if self.pending is None:
+                    try:
+                        msg = input("Enter a message: ")
+                    except EOFError:
+                        continue
+                else:
+                    msg = self.pending
+
+                if msg == "q!":
+                    break
+
+                await self.send_message(msg)
+
+            

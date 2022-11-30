@@ -21,6 +21,10 @@ producer_parse.add_argument('--key', '-k',
                             type=str,
                             help='decides which partition to write to')
 
+producer_parse.add_argument('--input',
+                            action='store_true',
+                            help='gets all messages from topic creation')
+
 args = producer_parse.parse_args()
 
 async def main() -> None:
@@ -28,8 +32,9 @@ async def main() -> None:
 
     topic = args.topic
     key = args.key
+    has_input = args.input
     
-    publisher = Producer('localhost',9001,topic,key)
+    publisher = Producer('localhost',9001,topic,key, has_input=has_input)
     await publisher.run_client()
     await publisher.input_messages()
 
