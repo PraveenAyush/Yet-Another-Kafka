@@ -1,32 +1,17 @@
 [[package]]
-name = "aio-pika"
-version = "8.2.5"
-description = "Wrapper for the aiormq for asyncio and humans."
+name = "aioredis"
+version = "2.0.1"
+description = "asyncio (PEP 3156) Redis support"
 category = "main"
 optional = false
-python-versions = ">3.6, <4"
+python-versions = ">=3.6"
 
 [package.dependencies]
-aiormq = ">=6.4.0,<6.5.0"
-yarl = "*"
+async-timeout = "*"
+typing-extensions = "*"
 
 [package.extras]
-develop = ["aiomisc (>=16.0,<17.0)", "coverage (!=4.3)", "coveralls", "pylava", "pyflakes (<2.5)", "pytest", "pytest-cov", "shortuuid", "nox", "sphinx", "sphinx-autobuild", "timeout-decorator", "tox (>=2.4)"]
-
-[[package]]
-name = "aiormq"
-version = "6.4.2"
-description = "Pure python AMQP asynchronous client library"
-category = "main"
-optional = false
-python-versions = ">=3.7"
-
-[package.dependencies]
-pamqp = "3.2.1"
-yarl = "*"
-
-[package.extras]
-develop = ["aiomisc (>=16.0,<17.0)", "coverage (!=4.3)", "coveralls", "pylava", "pytest", "pytest-cov", "tox (>=2.4)"]
+hiredis = ["hiredis (>=1.0)"]
 
 [[package]]
 name = "async-timeout"
@@ -37,58 +22,28 @@ optional = false
 python-versions = ">=3.6"
 
 [[package]]
-name = "idna"
-version = "3.4"
-description = "Internationalized Domain Names in Applications (IDNA)"
-category = "main"
-optional = false
-python-versions = ">=3.5"
-
-[[package]]
-name = "multidict"
-version = "6.0.2"
-description = "multidict implementation"
+name = "typing-extensions"
+version = "4.4.0"
+description = "Backported and Experimental Type Hints for Python 3.7+"
 category = "main"
 optional = false
 python-versions = ">=3.7"
-
-[[package]]
-name = "pamqp"
-version = "3.2.1"
-description = "RabbitMQ Focused AMQP low-level library"
-category = "main"
-optional = false
-python-versions = ">=3.7"
-
-[package.extras]
-codegen = ["lxml", "requests", "yapf"]
-testing = ["coverage", "flake8", "flake8-comprehensions", "flake8-deprecated", "flake8-import-order", "flake8-print", "flake8-quotes", "flake8-rst-docstrings", "flake8-tuple", "yapf"]
-
-[[package]]
-name = "yarl"
-version = "1.8.1"
-description = "Yet another URL library"
-category = "main"
-optional = false
-python-versions = ">=3.7"
-
-[package.dependencies]
-idna = ">=2.0"
-multidict = ">=4.0"
 
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.10, <3.10.9"
-content-hash = "0c7bd60c48df2bd34c6c47f5ddae6c2c726696c64e205dd3b4a3ca8cd51f8bb4"
+content-hash = "5890324c925450f2d5b1e12fe0a8e8d2e2546de723f2c421b92b962476a965b4"
 
 [metadata.files]
-aio-pika = []
-aiormq = []
+aioredis = [
+    {file = "aioredis-2.0.1-py3-none-any.whl", hash = "sha256:9ac0d0b3b485d293b8ca1987e6de8658d7dafcca1cddfcd1d506cae8cdebfdd6"},
+    {file = "aioredis-2.0.1.tar.gz", hash = "sha256:eaa51aaf993f2d71f54b70527c440437ba65340588afeb786cd87c55c89cd98e"},
+]
 async-timeout = [
     {file = "async-timeout-4.0.2.tar.gz", hash = "sha256:2163e1640ddb52b7a8c80d0a67a08587e5d245cc9c553a74a847056bc2976b15"},
     {file = "async_timeout-4.0.2-py3-none-any.whl", hash = "sha256:8ca1e4fcf50d07413d66d1a5e416e42cfdf5851c981d679a09851a6853383b3c"},
 ]
-idna = []
-multidict = []
-pamqp = []
-yarl = []
+typing-extensions = [
+    {file = "typing_extensions-4.4.0-py3-none-any.whl", hash = "sha256:16fa4864408f655d35ec496218b85f79b3437c829e93320c7c9215ccfd92489e"},
+    {file = "typing_extensions-4.4.0.tar.gz", hash = "sha256:1511434bb92bf8dd198c12b1cc812e800d4181cfcb867674e0f8279cc93087aa"},
+]

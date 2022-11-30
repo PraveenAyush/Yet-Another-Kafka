@@ -2,7 +2,8 @@ import argparse
 
 # Create the parser
 consumer_parse = argparse.ArgumentParser(
-    prog='consumer', description='Choose the consumer topic')
+    prog='consumer', description='Choose the consumer topic'
+)
 
 # Add the arguments
 consumer_parse.add_argument('--topic', '-tp',

@@ -3,9 +3,7 @@ import json
 from pathlib import Path
 from typing import Callable
 
-import aio_pika    
-            
-                
+
 class Broker:
     """A class to implement functionalities of a broker."""
 
