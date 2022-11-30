@@ -37,13 +37,13 @@ class Producer:
 
     async def send_message_broker(self, broker_id: int | None, message: bytes, callback: Callable | None = None):
         broker_url = self.get_broker_url(broker_id)
-        print(self.broker_connections)
+        # print(self.broker_connections)
         
         try:
             writer = self.broker_connections[broker_url]["writer"]
             reader = self.broker_connections[broker_url]["reader"]
         except KeyError:
-            print("got key error, establishing connection.")
+            print("Got key error, establishing connection.")
             reader, writer = await asyncio.open_connection(
                 self.metadata["brokers"][str(broker_id)]["hostname"],
                 self.metadata["brokers"][str(broker_id)]["port"]
@@ -125,6 +125,7 @@ class Producer:
             try:
                 await self.send_message_broker(broker_id, json.dumps(message).encode())
             except Exception as e:
+                print(type(e), str(e))
                 print("socket closed, fetch metadata and send to new leader if available.")
                 del self.metadata["brokers"][str(broker_id)]
 

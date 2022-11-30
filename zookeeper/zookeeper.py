@@ -92,17 +92,18 @@ class ZooKeeper:
         except Exception as e:
             print(type(e), str(e))
             print(f"Broker {broker_id} died.")
-            print(self.broker_metadata)
             del self.broker_metadata[broker_id]
+            print(self.broker_metadata)
 
-            if len(self.broker_metadata) > 1:
-                self.topic_metadata = self.elect_new_leader(broker_id)
 
-                await self.redis.publish("metadata", self.get_metadata())
+            self.topic_metadata = self.elect_new_leader(broker_id)
+
+            await self.redis.publish("metadata", self.get_metadata())
 
     def elect_new_leader(self, dead_broker_id):
         print("electing")
         new = deepcopy(self.topic_metadata)
+        print([broker for broker in self.broker_metadata if broker != dead_broker_id])
         remaining_brokers = cycle([broker for broker in self.broker_metadata if broker != dead_broker_id])
         for topic, partition in self.topic_metadata.items():
             for partition_id, value in partition.items():
