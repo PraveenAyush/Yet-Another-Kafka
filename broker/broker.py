@@ -16,7 +16,7 @@ class Broker:
         self.rmq_port = rmq_port
 
         self.brokers = {}
-        self.topics = {}
+        self.new_topics = set()
 
         
 
@@ -129,6 +129,10 @@ class Broker:
         """
         if message['type'] == "producer":
             p = Path(message['topic'])
+
+            if not p.exists():
+                self.new_topics.add(message['topic'])
+
             p.mkdir(exist_ok=True, parents=True)
 
             file = Path(message['topic'], message['partition']+'.txt')
@@ -138,6 +142,10 @@ class Broker:
             file.open('a')
             with file.open('a') as f:
                 f.write(message['value'] + '\n')
+            
+            self.topics.add(message['topic'])
+            writer.write(json.dumps(message).encode())  
+            await writer.drain() 
         
         elif message['type'] == "consumer":
             if message['full']:
