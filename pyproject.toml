@@ -8,6 +8,7 @@ license = "MIT"
 [tool.poetry.dependencies]
 python = ">=3.10, <3.10.9"
 aio-pika = "^8.2.5"
+async-timeout = "^4.0.2"
 
 [tool.poetry.dev-dependencies]
 

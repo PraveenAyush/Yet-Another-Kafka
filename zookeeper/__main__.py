@@ -28,6 +28,6 @@ from zookeeper import ZooKeeper
 
 async def main():
     z = ZooKeeper()
-    await z.start()
+    await z.run_server()
 
 asyncio.run(main())
