@@ -31,6 +31,7 @@ async def main() -> None:
     
     publisher = Producer('localhost',9001,topic,key)
     await publisher.run_client()
+    await publisher.input_messages()
 
 if __name__ == "__main__":
     asyncio.run(main())

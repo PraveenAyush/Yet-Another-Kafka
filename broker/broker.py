@@ -28,7 +28,7 @@ class Broker:
         self.zk_reader = ...
         self.zk_writer = ...
 
-        self.data_path = Path("broker", "data")
+        self.data_path = Path("data", str(self.broker_id))
 
         self.broker_connections = {}
 
@@ -179,6 +179,8 @@ class Broker:
 
                 with file.open('a') as f:
                     f.write(message['value'] + '\n')
+
+                print(file)
                 
                 ack_msg = {
                     "protocol": "ack",

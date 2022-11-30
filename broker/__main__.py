@@ -1,10 +1,12 @@
 import asyncio
+import sys
+
 from broker import Broker
 
 
 async def main() -> None:
     """Run broker server."""
-    broker = Broker(broker_id=0, port=9001)
+    broker = Broker(broker_id=int(sys.argv[1]), port=int(sys.argv[2]))
     await broker.setup()
 
 if __name__ == "__main__":
