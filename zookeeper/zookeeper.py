@@ -57,7 +57,7 @@ class ZooKeeper:
 
                         if msg["broker_id"] not in self.broker_metadata:
                             self.broker_metadata[msg["broker_id"]] = {
-                                "hostname": msg["hostname"],
+                                "hostname": "localhost",
                                 "port": msg["port"],
                             }
                         return_dict = {
