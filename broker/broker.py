@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from typing import Callable
 
-import aioredis
+from redis import asyncio as aioredis
 import async_timeout
 
 
@@ -38,7 +38,6 @@ class Broker:
 
         self.pubsub = self.redis.pubsub()
 
-
     async def setup(self) -> None: 
         """Start listening for clients and connect to zookeeper."""
         await self.pubsub.subscribe("metadata", "update_replica")
@@ -70,7 +69,6 @@ class Broker:
                     await asyncio.sleep(0.01)
             except asyncio.TimeoutError:
                 pass
-
 
     async def client_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """Callback function to handle client connections from producer and consumers."""
@@ -114,7 +112,7 @@ class Broker:
 
         callback(data_parsed)
 
-    async def run_client(self)-> None:
+    async def run_client(self) -> None:
         """Connect socket client to zookeeper"""
         try:
             self.zk_reader, self.zk_writer = await asyncio.open_connection(self.zk_hostname, self.zk_port)
@@ -153,7 +151,6 @@ class Broker:
             f.write(value + '\n')
 
         print(file)
-
 
     async def handle_message(self, message: dict, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> bool:
         """

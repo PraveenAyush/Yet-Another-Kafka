@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-import aioredis
+from redis import asyncio as aioredis
 import async_timeout
 
 class Consumer:

@@ -3,7 +3,7 @@ import json
 from copy import deepcopy
 from itertools import cycle
 
-import aioredis
+from redis import asyncio as aioredis
 from async_timeout import timeout
 
 import traceback
@@ -76,15 +76,15 @@ class ZooKeeper:
 
                         await self.redis.publish("metadata", self.get_metadata())
 
-                    case "heartbeat":
-                        print(f"{msg['broker_id']} is alive.")
-
-                        heartbeat_ack = {
-                            "protocol": "heartbeat",
-                            "status": 1
-                        }
-                        # writer.write(json.dumps(heartbeat_ack).encode())
-                        # await writer.drain()
+                    # case "heartbeat":
+                    #     print(f"{msg['broker_id']} is alive.")
+                    #
+                    #     heartbeat_ack = {
+                    #         "protocol": "heartbeat",
+                    #         "status": 1
+                    #     }
+                    #     # writer.write(json.dumps(heartbeat_ack).encode())
+                    #     # await writer.drain()
 
                     case _:
                         print("no message")

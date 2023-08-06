@@ -65,6 +65,7 @@ class Producer:
             if not data:
                 raise Exception("Socket Closed")
             data_d = json.loads(data.decode())
+            print(data_d)
             await self.handle_message(data_d)
         except Exception as e:
             print(type(e), str(e))

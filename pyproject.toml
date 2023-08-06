@@ -6,9 +6,9 @@ authors = ["Your Name <you@example.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = ">=3.10, <3.10.9"
+python = ">=3.11, <3.11.9"
 async-timeout = "^4.0.2"
-aioredis = "^2.0.1"
+redis = "^4.6.0"
 
 [tool.poetry.dev-dependencies]
 
